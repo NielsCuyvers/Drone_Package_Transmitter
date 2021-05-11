@@ -57,11 +57,10 @@ uint32_t tsLastReport{};
 // LED
 unsigned long previousMil{}; // zijn extended variabelen. ze kunnen tot 32 bits getallen opslagen.
 unsigned long currentMil{};  // zijn extended variabelen. ze kunnen tot 32 bits getallen opslagen.
-const long wait{200};     //waiting time
-int brightness0{};       // Startwaarde Led
-int fadecount{15};        // Met hoeveel fade waarde elke keer omhoog gaat
+const long wait{200};        //waiting time
+int brightness0{};           // Startwaarde Led
+int fadecount{15};           // Met hoeveel fade waarde elke keer omhoog gaat
 bool toggleLed{true};
-
 
 //gps
 String cor{""};
@@ -184,54 +183,60 @@ void loop()
 
 void loopLedEnMagneet(void *parameter)
 {
-    if (toggleLed)
-      digitalWrite(14, LOW);
-    else
-      digitalWrite(14, HIGH);
-    toggleLed = !toggleLed;
+  if (toggleLed)
+    digitalWrite(14, LOW);
+  else
+    digitalWrite(14, HIGH);
+  toggleLed = !toggleLed;
+  vTaskDelete(NULL); // Deze task wordt maar 1 keer gerund en dan verwijdert.
 }
 
 void loopHartSlagSensorGpsEnLora(void *parameter)
 {
-  pox.update();
-  BPM = pox.getHeartRate();
-  SpO2 = pox.getSpO2();
-  if (millis() - tsLastReport > REPORTING_PERIOD_MS)
+  for (;;)
   {
-    Serial.print("Heart rate:");
-    Serial.print(BPM);
-    Serial.print(" bpm / SpO2:");
-    Serial.print(SpO2);
-    Serial.println(" %");
-    tsLastReport = millis();
-  }
-  hart = String(BPM, 2) + " BPM" + "  " + String(SpO2, 2) + "% 02";
-
-  while (ss.available() > 0)
-  {
-    gps.encode(ss.read());
-    if (gps.location.isUpdated())
+    pox.update();
+    BPM = pox.getHeartRate();
+    SpO2 = pox.getSpO2();
+    if (millis() - tsLastReport > REPORTING_PERIOD_MS)
     {
-
-      glat = (gps.location.lat());
-      glng = (gps.location.lng());
-
-      cor = String(glat, 6) + ";" + String(glng, 6);
-      Serial.println(cor);
-
-      LoRa.beginPacket();
-      LoRa.print(cor);
-      LoRa.print(hart);
-      LoRa.endPacket();
-      Serial.println("data send");
+      Serial.print("Heart rate:");
+      Serial.print(BPM);
+      Serial.print(" bpm / SpO2:");
+      Serial.print(SpO2);
+      Serial.println(" %");
+      tsLastReport = millis();
     }
+    hart = String(BPM, 2) + " BPM" + "  " + String(SpO2, 2) + "% 02";
+
+    while (ss.available() > 0)
+    {
+      gps.encode(ss.read());
+      if (gps.location.isUpdated())
+      {
+
+        glat = (gps.location.lat());
+        glng = (gps.location.lng());
+
+        cor = String(glat, 6) + ";" + String(glng, 6);
+        Serial.println(cor);
+
+        LoRa.beginPacket();
+        LoRa.print(cor);
+        LoRa.print(hart);
+        LoRa.endPacket();
+        Serial.println("data send");
+      }
+    }
+    display.clearDisplay();
+    display.setCursor(0, 0);
+    display.print("send:");
+    display.setCursor(0, 20);
+    display.print(cor);
+    display.setCursor(0, 30);
+    display.print(hart);
+    display.display();
   }
-  display.clearDisplay();
-  display.setCursor(0, 0);
-  display.print("send:");
-  display.setCursor(0, 20);
-  display.print(cor);
-  display.setCursor(0, 30);
-  display.print(hart);
-  display.display();
+  
+  vTaskDelete(NULL); // Dit wordt nooit uitgevoerd omdat de lus hierboven oneindig is, maar je weet maar nooit.
 }
