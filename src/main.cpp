@@ -51,29 +51,30 @@
 #pragma region GlobaleVariabele
 // Hartslag meter
 PulseOximeter pox;
-float BPM, SpO2;
-uint32_t tsLastReport = 0;
+float BPM{}, SpO2{};
+uint32_t tsLastReport{};
 
 // LED
-unsigned long previousMil; // zijn extended variabelen. ze kunnen tot 32 bits getallen opslagen.
-unsigned long currentMil;  // zijn extended variabelen. ze kunnen tot 32 bits getallen opslagen.
-const long wait = 200;     //waiting time
-int brightness0 = 0;       // Startwaarde Led
-int fadecount = 15;        // Met hoeveel fade waarde elke keer omhoog gaat
+unsigned long previousMil{}; // zijn extended variabelen. ze kunnen tot 32 bits getallen opslagen.
+unsigned long currentMil{};  // zijn extended variabelen. ze kunnen tot 32 bits getallen opslagen.
+const long wait{200};     //waiting time
+int brightness0{};       // Startwaarde Led
+int fadecount{15};        // Met hoeveel fade waarde elke keer omhoog gaat
+bool toggleLed{true};
 
 
 //gps
-String cor = "";
+String cor{""};
 float glat{};
 float glng{};
-String hart = "";
+String hart{""};
 
 TinyGPSPlus gps;
 SoftwareSerial ss(15, 13);
 
 //packet counter
 int counter{};
-String LoRaData;
+String LoRaData{""};
 
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RST);
 
@@ -168,7 +169,6 @@ void setup()
 }
 #pragma endregion FunctieSetup
 
-#pragma region FunctieLoop
 void loop()
 {
   xTaskCreatePinnedToCore(
@@ -181,27 +181,16 @@ void loop()
       0);
   vTaskDelay((secondenTussenLedInterval * 1000) / portTICK_PERIOD_MS); // Activeerd de idle state voor x aantal second en gaat dan door.
 }
-#pragma endregion FunctieLoop
 
-#pragma region FunctieLoopLedEnMagneet
 void loopLedEnMagneet(void *parameter)
 {
-  // currentmil zetten naar previous zodat we na het volledig doorlopen terug gaan kunnen vergelijken met de nieuwe waarde
-  previousMil = currentMil;
-  ledcWrite(0, brightness0); // Led value instellen
-
-  //Brightness aanpassen dus plus de fadecount doen
-  brightness0 = brightness0 + fadecount;
-
-  // Bij minimum en maximum waarde zal de fadecount wisselen van teken. Zo gaat het dimmen in beide richtingen
-  if (brightness0 <= 0 || brightness0 >= 255)
-  {
-    fadecount = -fadecount;
-  }
+    if (toggleLed)
+      digitalWrite(14, LOW);
+    else
+      digitalWrite(14, HIGH);
+    toggleLed = !toggleLed;
 }
-#pragma endregion FunctieLoopLedEnMagneet
 
-#pragma region FunctieLoopHartSlagSensorGpsEnLora
 void loopHartSlagSensorGpsEnLora(void *parameter)
 {
   pox.update();
@@ -246,5 +235,3 @@ void loopHartSlagSensorGpsEnLora(void *parameter)
   display.print(hart);
   display.display();
 }
-#pragma endregion FunctieLoopHartSlagSensorGpsEnLora
-
