@@ -1,13 +1,15 @@
+
+#pragma region Includes
+//FreeRTOS
+#include <Arduino.h>
+
 //gps
 #include <SoftwareSerial.h>
 #include <TinyGPS++.h>
 
-
-
 //Libraries for LoRa
 #include <SPI.h>
 #include <LoRa.h>
-
 
 //Libraries for OLED Display
 #include <Wire.h>
@@ -16,23 +18,16 @@
 
 //gps
 #include "MAX30100_PulseOximeter.h"
+#pragma endregion Includes
+
+#pragma region Defines
+// Hartslag
 #define REPORTING_PERIOD_MS 2000
-PulseOximeter pox;
-float BPM, SpO2;
-uint32_t tsLastReport = 0;
-
-
 
 //led op bord instellen als led
 #define ledPin 14
 
-unsigned long previousMil; // zijn extended variabelen. ze kunnen tot 32 bits getallen opslagen.
-unsigned long currentMil; // zijn extended variabelen. ze kunnen tot 32 bits getallen opslagen.
-const long wait = 200; //waiting time 
-int brightness0 = 0;    // Startwaarde Led
-int fadecount = 15;    // Met hoeveel fade waarde elke keer omhoog gaat
-
-//define the pins used by the LoRa transceiver module
+//define the pins used by the LoRa transciever module
 #define SCK 5
 #define MISO 19
 #define MOSI 27
@@ -51,31 +46,57 @@ int fadecount = 15;    // Met hoeveel fade waarde elke keer omhoog gaat
 #define OLED_RST 16
 #define SCREEN_WIDTH 128 // OLED display width, in pixels
 #define SCREEN_HEIGHT 64 // OLED display height, in pixels
+#pragma endregion Defines
+
+#pragma region GlobaleVariabele
+// Hartslag meter
+PulseOximeter pox;
+float BPM, SpO2;
+uint32_t tsLastReport = 0;
+
+// LED
+unsigned long previousMil; // zijn extended variabelen. ze kunnen tot 32 bits getallen opslagen.
+unsigned long currentMil;  // zijn extended variabelen. ze kunnen tot 32 bits getallen opslagen.
+const long wait = 200;     //waiting time
+int brightness0 = 0;       // Startwaarde Led
+int fadecount = 15;        // Met hoeveel fade waarde elke keer omhoog gaat
+
 
 //gps
 String cor = "";
-float glat = 0;
-float glng = 0;
+float glat{};
+float glng{};
 String hart = "";
 
 TinyGPSPlus gps;
 SoftwareSerial ss(15, 13);
 
 //packet counter
-int counter = 0;
+int counter{};
 String LoRaData;
 
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RST);
 
+// FreeRTOS
+int secondenTussenLedInterval{4};
+#pragma endregion GlobaleVariabele
 
+#pragma region FunctiesDefiniatie
+// Standaard Arduino functies
+void setup();
+void loop();
 
-void setup() {
+// Helper functies
+void loopLedEnMagneet();
+void loopHartSlagSensorGpsEnLora();
+#pragma endregion FunctiesDefiniatie
 
-   //initialize Serial Monitor
+#pragma region FunctieSetup
+void setup()
+{
+  //initialize Serial Monitor
   Serial.begin(9600);
   ss.begin(9600);
-  
-
 
   //reset OLED display via software
   pinMode(OLED_RST, OUTPUT);
@@ -85,82 +106,126 @@ void setup() {
 
   //initialize OLED
   Wire.begin(OLED_SDA, OLED_SCL);
-  if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3c, false, false)) { // Address 0x3C for 128x32
+  if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3c, false, false))
+  { // Address 0x3C for 128x32
     Serial.println(F("SSD1306 allocation failed"));
-    for(;;); // Don't proceed, loop forever
+    for (;;)
+      ; // Don't proceed, loop forever
   }
-  
+
   display.clearDisplay();
   display.setTextColor(WHITE);
   display.setTextSize(1);
-  display.setCursor(0,0);
+  display.setCursor(0, 0);
   display.print("LORA SENDER ");
   display.display();
-  
+
   Serial.println("LoRa Sender Test");
 
   //SPI LoRa pins
   SPI.begin(SCK, MISO, MOSI, SS);
   //setup LoRa transceiver module
   LoRa.setPins(SS, RST, DIO0);
-  
-  if (!LoRa.begin(BAND)) {
+
+  if (!LoRa.begin(BAND))
+  {
     Serial.println("Starting LoRa failed!");
-    while (1);
+    while (1)
+      ;
   }
   Serial.println("LoRa Initializing OK!");
-  display.setCursor(0,10);
+  display.setCursor(0, 10);
   display.print("LoRa Initializing OK!");
   display.display();
-  
-    //hartslag setup
-    pinMode(19, OUTPUT);
-    
-    Serial.print("Initializing Pulse Oximeter..");
- 
-    if (!pox.begin())
-    {
-         Serial.println("FAILED");
-         for(;;);
-    }
-    else
-    {
-         Serial.println("SUCCESS");
-    }
- 
-    // The default current for the IR LED is 50mA and it could be changed by uncommenting the following line.
-    pox.setIRLedCurrent(MAX30100_LED_CURR_7_6MA); 
 
+  //hartslag setup
+  pinMode(19, OUTPUT);
 
+  Serial.print("Initializing Pulse Oximeter..");
 
+  if (!pox.begin())
+  {
+    Serial.println("FAILED");
+    for (;;)
+      ;
+  }
+  else
+  {
+    Serial.println("SUCCESS");
+  }
+
+  // The default current for the IR LED is 50mA and it could be changed by uncommenting the following line.
+  pox.setIRLedCurrent(MAX30100_LED_CURR_7_6MA);
+
+  xTaskCreatePinnedToCore(
+      loopHartSlagSensorGpsEnLora,
+      "loopHartSlagSensorGpsEnLora",
+      1024,
+      NULL,
+      1,
+      NULL,
+      1);
 }
+#pragma endregion FunctieSetup
 
+#pragma region FunctieLoop
+void loop()
+{
+  xTaskCreatePinnedToCore(
+      loopLedEnMagneet,
+      "loopLedEnMagneet",
+      1024,
+      NULL,
+      2,
+      NULL,
+      0);
+  vTaskDelay((secondenTussenLedInterval * 1000) / portTICK_PERIOD_MS); // Activeerd de idle state voor x aantal second en gaat dan door.
+}
+#pragma endregion FunctieLoop
 
+#pragma region FunctieLoopLedEnMagneet
+void loopLedEnMagneet(void *parameter)
+{
+  // currentmil zetten naar previous zodat we na het volledig doorlopen terug gaan kunnen vergelijken met de nieuwe waarde
+  previousMil = currentMil;
+  ledcWrite(0, brightness0); // Led value instellen
 
+  //Brightness aanpassen dus plus de fadecount doen
+  brightness0 = brightness0 + fadecount;
 
-  void loop() {
-    
-    pox.update();
-    BPM = pox.getHeartRate();
-    SpO2 = pox.getSpO2();
-    if (millis() - tsLastReport > REPORTING_PERIOD_MS)
-    {
-        Serial.print("Heart rate:");
-        Serial.print(BPM);
-        Serial.print(" bpm / SpO2:");
-        Serial.print(SpO2);
-        Serial.println(" %");
-        tsLastReport = millis();  
-    }
-    hart = String(BPM,2)+ " BPM" + "  " + String(SpO2,2)+ "% 02";
+  // Bij minimum en maximum waarde zal de fadecount wisselen van teken. Zo gaat het dimmen in beide richtingen
+  if (brightness0 <= 0 || brightness0 >= 255)
+  {
+    fadecount = -fadecount;
+  }
+}
+#pragma endregion FunctieLoopLedEnMagneet
 
-    while (ss.available() > 0){
+#pragma region FunctieLoopHartSlagSensorGpsEnLora
+void loopHartSlagSensorGpsEnLora(void *parameter)
+{
+  pox.update();
+  BPM = pox.getHeartRate();
+  SpO2 = pox.getSpO2();
+  if (millis() - tsLastReport > REPORTING_PERIOD_MS)
+  {
+    Serial.print("Heart rate:");
+    Serial.print(BPM);
+    Serial.print(" bpm / SpO2:");
+    Serial.print(SpO2);
+    Serial.println(" %");
+    tsLastReport = millis();
+  }
+  hart = String(BPM, 2) + " BPM" + "  " + String(SpO2, 2) + "% 02";
+
+  while (ss.available() > 0)
+  {
     gps.encode(ss.read());
-    if (gps.location.isUpdated()){
-      
+    if (gps.location.isUpdated())
+    {
+
       glat = (gps.location.lat());
       glng = (gps.location.lng());
-
 
       cor = String(glat, 6) + ";" + String(glng, 6);
       Serial.println(cor);
@@ -172,31 +237,14 @@ void setup() {
       Serial.println("data send");
     }
   }
-      display.clearDisplay();
-      display.setCursor(0,0);
-      display.print("send:");
-      display.setCursor(0,20);
-      display.print(cor);
-      display.setCursor(0,30);
-      display.print(hart);
-      display.display();
+  display.clearDisplay();
+  display.setCursor(0, 0);
+  display.print("send:");
+  display.setCursor(0, 20);
+  display.print(cor);
+  display.setCursor(0, 30);
+  display.print(hart);
+  display.display();
+}
+#pragma endregion FunctieLoopHartSlagSensorGpsEnLora
 
-        //current tijd ophalen sinds de start van het programma
-  currentMil= millis();
-  //als het 30ms geleden is op meer sinds de if functie is gedaan, zal de if functie terug in werking treden.
-  // Doordat we dit gebruiken en niet een delay, zal het programma niet tegengehouden worden door een blocking functie zoals delay().
-  if (currentMil - previousMil >= wait ) {
-     // currentmil zetten naar previous zodat we na het volledig doorlopen terug gaan kunnen vergelijken met de nieuwe waarde
-    previousMil = currentMil;
-    ledcWrite(0, brightness0); // Led value instellen
-
-    //Brightness aanpassen dus plus de fadecount doen
-    brightness0 = brightness0 + fadecount;
-
-    // Bij minimum en maximum waarde zal de fadecount wisselen van teken. Zo gaat het dimmen in beide richtingen
-    if (brightness0 <= 0 || brightness0 >= 255) {
-      fadecount = -fadecount;
-    }
-  }
-
-  }
