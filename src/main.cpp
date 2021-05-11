@@ -87,11 +87,10 @@ void setup();
 void loop();
 
 // Helper functies
-void loopLedEnMagneet();
-void loopHartSlagSensorGpsEnLora();
+void loopLedEnMagneet(void *parameter);
+void loopHartSlagSensorGpsEnLora(void *parameter);
 #pragma endregion FunctiesDefiniatie
 
-#pragma region FunctieSetup
 void setup()
 {
   //initialize Serial Monitor
@@ -166,7 +165,6 @@ void setup()
       NULL,
       1);
 }
-#pragma endregion FunctieSetup
 
 void loop()
 {
